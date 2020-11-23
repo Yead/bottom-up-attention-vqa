@@ -26,7 +26,7 @@ class Attention(nn.Module):
     def __init__(self, v_dim, q_dim, num_hid):
         super(Attention, self).__init__()
         self.nonlinear = FCNet([v_dim + q_dim, num_hid])
-        self.linear = weight_norm(nn.linear(num_hid, 1), dim=None)
+        self.linear = weight_norm(nn.Linear(num_hid, 1), dim=None)
 
     def forward(self, v, q):
         logits = self.logits(v,q)

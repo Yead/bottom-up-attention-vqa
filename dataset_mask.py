@@ -118,8 +118,8 @@ class VQAFeatureDataset(Dataset):
         self.ans2label = cPickle.load(open(ans2label_path, 'rb'))
         # self.label2ans = cPickle.load(open(label2ans_path, 'rb'))
 
-        self.num_ans_candidates = len(self.ans2label)
-        
+        pick_idx = np.load("%s/pick_idx.npy"%cache)
+        self.num_ans_candidates = pick_idx.shape[1]
         self.dictionary = dictionary
         img_name_list = {}
         patients = json.load(open('/home/ymeng/store_ym/medical_report_vqa/data/X_ray/patients.json',"r")) 
@@ -127,12 +127,9 @@ class VQAFeatureDataset(Dataset):
             img_name_list[line.strip()] = line.strip()
 
         self.img_name_list = img_name_list
-        img_id2idx = {}       
-
+        img_id2idx = {}      
         sp = np.concatenate(([[0.]],[[0.]],[[1.]], [[1.]],[[1.]],[[1.]]), axis=1)
-     
         ft = "data/cache2/features.json"
-
         with open(ft,"r") as f:
             features_tmp = json.load(f)
             for f_id, name_feature in enumerate(features_tmp.keys()):
@@ -142,16 +139,10 @@ class VQAFeatureDataset(Dataset):
         self.entries = _load_dataset(cache, name, self.img_id2idx, self.img_name_list)
         self.tokenize()
         self.tensorize()
+        self.v_dim = 512
+        self.s_dim = self.v_dim    
 
-        self.img = []        
-        for index in range(len(self.entries)):
-            entry = self.entries[index]
-            path = '/home/ymeng/store_ym/data/IU_X_ray/NLMCXR_png'
-            image_path =  os.path.join(path, str(entry['image_id']))
-            image = cv2.imread(image_path)
-            img = np.array(cv2.resize(image, (256, 256), interpolation = cv2.INTER_AREA),dtype=np.float32)
-            img = np.transpose(img,(2,0,1))
-            self.img.append(img)
+
 
     def tokenize(self, max_length=14):
         """Tokenizes the questions.
@@ -192,6 +183,43 @@ class VQAFeatureDataset(Dataset):
 
     def __getitem__(self, index):
         entry = self.entries[index]
+        # img = self.img[index]
+        path = '/home/ymeng/store_ym/data/IU_X_ray/NLMCXR_png'
+        image_path =  os.path.join(path, str(entry['image_id']))
+        image = cv2.imread(image_path)
+        img = np.array(cv2.resize(image, (256, 256), interpolation = cv2.INTER_AREA),dtype=np.float32)
+        img = np.transpose(img,(2,0,1))
+            # self.img.append(img)
+        question = entry['q_token']
+        answer = entry['answer']
+        labels = answer['labels']
+        scores = answer['scores']
+        target = torch.zeros(self.num_ans_candidates)
+
+        spatials = target
+        question_id = entry['question_id']
+        if labels is not None:
+            target.scatter_(0, labels, scores) #len = len(labels). scores are the score for 
+        return img.astype(np.float32), question_id, question, target#(117,14,117)
+ 
+    def __len__(self):
+        return len(self.entries)
+
+class VQAFeatureDataset_fast(VQAFeatureDataset):
+    def __init__(self, name, dictionary, train_target, dataroot='data', cache='data/cache'):
+        super(VQAFeatureDataset_fast, self).__init__(name, dictionary, train_target, dataroot=dataroot, cache=cache)
+        self.img = []        
+        for index in range(len(self.entries)):
+            entry = self.entries[index]
+            path = '/home/ymeng/store_ym/data/IU_X_ray/NLMCXR_png'
+            image_path =  os.path.join(path, str(entry['image_id']))
+            image = cv2.imread(image_path)
+            img = np.array(cv2.resize(image, (256, 256), interpolation = cv2.INTER_AREA),dtype=np.float32)
+            img = np.transpose(img,(2,0,1))
+            self.img.append(img)
+        
+    def __getitem__(self, index):
+        entry = self.entries[index]
         img = self.img[index]
         question = entry['q_token']
         answer = entry['answer']
@@ -199,44 +227,17 @@ class VQAFeatureDataset(Dataset):
         scores = answer['scores']
         target = torch.zeros(self.num_ans_candidates)
 
-        # question_txt = entry["question"]
         spatials = target
         question_id = entry['question_id']
         if labels is not None:
-            target.scatter_(0, labels, scores) #len = len(labels). scores are the score for each answer. it's a list of scores of words
-        # i = entry['image_id']
-        # print(question.size(), img.shape)
-        # return img.astype(np.float32), spatials, question, target #(117,14,117)
+            target.scatter_(0, labels, scores) #len = len(labels). scores are the score for 
         return img.astype(np.float32), question_id, question, target#(117,14,117)
-
- 
-    def __len__(self):
-        return len(self.entries)
-
 
 class dicti:
     def __init__(self, ntoken):
         self.ntoken = ntoken
 
 
-class VQAFeatureDataset_debug(Dataset):
-    def __init__(self, name,  dataroot='data', cache='cache'):
-        super(VQAFeatureDataset_debug, self).__init__()
-        self.dictionary = dicti(100)
-        self.num_hid = 1000
-        self.v_dim  = 512
-        self.num_ans_candidates = 100
-
-    def __getitem__(self, index):
-        img = torch.zeros(512,512)
-        question_id = (torch.rand(1)*100).int().long() 
-        question = torch.rand(14)
-        target = torch.zeros(self.num_ans_candidates).float()
-
-        return img #, question_id, question, target
-
-    def __len__(self):
-        return 10000
 
 
 
