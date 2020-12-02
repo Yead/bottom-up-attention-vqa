@@ -221,7 +221,7 @@ def build_baseline0_newatt(dataset, num_hid, emb_dim, answer_np, mask, pick_idx,
     #     v_att = 
 
     if "newatt" in tag:
-        v_att = NewAttention(v_dim, emb_dim, num_hid)
+        v_att = NewAttention(v_dim, num_hid, num_hid)
 
     else:
         v_att = Attention(v_dim, q_emb.num_hid, num_hid)

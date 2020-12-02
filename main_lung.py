@@ -27,7 +27,7 @@ def parse_args():
     # parser.add_argument('--model', type=str, default='co_attention')
     parser.add_argument('--batch_size', type=int, default= 32)#512
     parser.add_argument('--seed', type=int, default=1111, help='random seed')
-    parser.add_argument('--cache', type=str, default="1121")
+    parser.add_argument('--cache', type=str, default="single")
     parser.add_argument('--tag', type=str, default="")
     args = parser.parse_args()
     return args

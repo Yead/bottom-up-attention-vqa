@@ -6,6 +6,7 @@ import utils
 from torch.autograd import Variable
 import pickle as cPickle
 import numpy as np
+from tensorboardX import SummaryWriter
 
 def binary_cross_entropy_with_logits(input, target, weight=None, size_average=True):             
     """Function that measures Binary Cross Entropy between target and output logits.                    
@@ -34,7 +35,7 @@ def binary_cross_entropy_with_logits(input, target, weight=None, size_average=Tr
     # P = ((-max_val).exp() + (-input - max_val).exp()).log() 
 
     # weight = (target * 7 + (1-target) * 1) * torch.square(target - P)
-    weight = (target * 7 + (1-target) * 1) 
+    # weight = (target * 7 + (1-target) * 1) 
     if weight is not None: 
         loss = loss * weight  
 
@@ -177,14 +178,18 @@ def get_id_np(tag_list, tag):
 
 
 
-def train(model, train_loader,eval_loader,  cache, num_epochs, output, tag):
+def train(model, train_loader,eval_loader,  cache, num_epochs, output, tag, start_epoch=0):
     utils.create_dir(output)
-    optim = torch.optim.Adamax(model.parameters())
-    logger = utils.Logger(os.path.join(output, '%s_log.txt'%tag))
-    logger.write(tag)
-    
-    best_eval_score = 0
+    utils.create_dir("%s/%s"%(output,tag))
+    if start_epoch!=0:
+        model_path = os.path.join(output, '%smodel.pth'%tag)
+        model = torch.load(model_path)
 
+    writer = SummaryWriter("%s/%s"%(output,tag))
+    optim = torch.optim.Adamax(model.parameters())
+    logger = utils.Logger(os.path.join(output, '%s_log.txt'%tag), add=True)
+    logger.write(tag)
+    best_eval_score = 0
     dataroot = 'data'
     name = 'train'
     # question_path = os.path.join(cache, "%s_questions.json"%name)
@@ -196,7 +201,7 @@ def train(model, train_loader,eval_loader,  cache, num_epochs, output, tag):
     # ans_id_torch = torch.from_numpy(ans_id_np)#.to(torch.int)
     pick_idx = model.pick_idx
     pick_num = (pick_idx>0).float()
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         total_loss = 0
         train_score = [0, 0]
         t = time.time()
@@ -223,10 +228,25 @@ def train(model, train_loader,eval_loader,  cache, num_epochs, output, tag):
         
         model.train(False)
         eval_score, bound, f1_score = evaluate(model, eval_loader, cache, pick_num)
+        eval_score = [100 * s for s in eval_score]
         model.train(True)
+        writer.add_scalar('train/loss', total_loss, global_step=epoch)
 
-        logger.write('epoch %d, time: %.2f \ttrain_loss: %.2f, score: %.2f %.2f \teval score: %.2f %.2f (%.2f)' % (epoch, time.time()-t, total_loss, train_score[0],  train_score[1], 100 * eval_score[0], 100 * eval_score[1], 100 * bound))
-        logger.write(str(f1_score))
+        writer.add_scalar('train/scores_pos',train_score[0] , global_step=epoch)
+        writer.add_scalar('train/scores_neg',train_score[1] , global_step=epoch)
+        writer.add_scalar('train/scores_true',train_score[0]-train_score[1] , global_step=epoch)
+
+        writer.add_scalar('eval/scores_pos',eval_score[0] , global_step=epoch)
+        writer.add_scalar('eval/scores_neg',eval_score[1] , global_step=epoch)
+        writer.add_scalar('eval/scores_true',eval_score[0]-eval_score[1] , global_step=epoch)
+        f1_score_m = f1_score.mean(0)
+        writer.add_scalar('eval/f1',f1_score_m[0] , global_step=epoch)
+        writer.add_scalar('eval/p',f1_score_m[1] , global_step=epoch)
+        writer.add_scalar('eval/r',f1_score_m[2] , global_step=epoch)
+        
+
+        logger.write('epoch %d, time: %.2f \ttrain_loss: %.2f, score: %.2f %.2f \teval score: %.2f %.2f (%.2f)' % (epoch, time.time()-t, total_loss, train_score[0],  train_score[1],  eval_score[0], eval_score[1], 100 * bound))
+        logger.write(str(f1_score_m))
         # logger.write('epoch %d, time: %.2f' % (epoch, time.time()-t))
         # logger.write('\ttrain_loss: %.2f, score: %.2f' % (total_loss, train_score))
         # logger.write('\teval score: %.2f (%.2f)' % (100 * eval_score, 100 * bound))
@@ -237,7 +257,7 @@ def train(model, train_loader,eval_loader,  cache, num_epochs, output, tag):
             model_path = os.path.join(output, '%smodel.pth'%tag)
             torch.save(model,model_path)
             best_eval_score = eval_score[0]-eval_score[1]/2
-
+    logger.write(str(f1_score))
 
 
 
